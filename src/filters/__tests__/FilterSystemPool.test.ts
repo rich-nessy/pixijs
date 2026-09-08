@@ -60,3 +60,61 @@ describe('FilterSystem pooled texture lifetime', () =>
         renderer.destroy();
     });
 });
+
+describe('FilterSystem shared bind group lifetime', () =>
+{
+    it('should empty the bind group texture slots once the filters are applied', async () =>
+    {
+        const renderer = await getWebGLRenderer({ width: 100, height: 100 });
+        const scene = createNestedFilteredScene();
+
+        renderer.render(scene);
+
+        const bindGroup = renderer.filter['_globalFilterBindGroup'];
+
+        // the bind group outlives the renderer, so anything still here outlives the scene
+        expect(bindGroup.getResource(1)).toBeNull();
+        expect(bindGroup.getResource(2)).toBeNull();
+        expect(bindGroup.getResource(3)).toBeNull();
+
+        renderer.destroy();
+    });
+
+    it('should not warn when the texture pool is cleared after a filter render', async () =>
+    {
+        const renderer = await getWebGLRenderer({ width: 100, height: 100 });
+        const scene = createNestedFilteredScene();
+
+        renderer.render(scene);
+
+        const warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => { /* quiet */ });
+
+        // pooled textures build their own style, so clearing the pool destroys both the source
+        // and the sampler the bind group was still holding
+        TexturePool.clear(true);
+
+        expect(warnSpy).not.toHaveBeenCalled();
+
+        warnSpy.mockRestore();
+        renderer.destroy();
+    });
+
+    it('should still render correctly through repeated filter passes', async () =>
+    {
+        const renderer = await getWebGLRenderer({ width: 100, height: 100 });
+        const scene = createNestedFilteredScene();
+
+        // slots are emptied after every pass, so each render has to repopulate them
+        for (let i = 0; i < 3; i++)
+        {
+            expect(() => renderer.render(scene)).not.toThrow();
+        }
+
+        const pixels = renderer.extract.pixels(scene);
+
+        // the sprite is white at 0.5 alpha with noise over it - not blank
+        expect(pixels.pixels.some((channel) => channel !== 0)).toBe(true);
+
+        renderer.destroy();
+    });
+});

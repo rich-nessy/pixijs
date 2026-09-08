@@ -922,6 +922,26 @@ export class FilterSystem implements System
             // return those textures for later!
             TexturePool.returnTexture(tempTexture);
         }
+
+        this._releaseBindGroupTextures();
+    }
+
+    /**
+     * Empties the texture slots of the shared filter bind group.
+     *
+     * `_globalFilterBindGroup` lives as long as the renderer, so whatever it was last given stays
+     * bound - which means a scene's texture source and its style outlive the scene, and are still
+     * bound when it tears down and destroys them. Every filter application sets slots 1 to 3 again
+     * before it draws, so there is nothing to gain from holding them in between.
+     *
+     * Slot 0 is left alone: it holds this system's own long-lived uniform group in the common case,
+     * so there is nothing there to release.
+     */
+    private _releaseBindGroupTextures(): void
+    {
+        this._globalFilterBindGroup.setResource(null, 1);
+        this._globalFilterBindGroup.setResource(null, 2);
+        this._globalFilterBindGroup.setResource(null, 3);
     }
 
     private _calculateFilterBounds(
