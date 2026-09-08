@@ -410,6 +410,10 @@ export class FilterSystem implements System
 
         // return the texture to the pool so we can reuse the next frame
         TexturePool.returnTexture(filterData.inputTexture);
+
+        // `_filterStack` recycles its FilterData, so anything left here is held until the slot is
+        // reused - which for a container means holding a whole scene graph long after it is gone
+        filterData.container = null;
     }
 
     /**
@@ -780,8 +784,11 @@ export class FilterSystem implements System
             --currentIndex;
         }
 
-        return currentIndex > 0 && this._filterStack[currentIndex].inputTexture
-            ? this._filterStack[currentIndex].inputTexture.source._resolution
+        // `inputTexture` may belong to a slot that has already been popped, so it can be a texture
+        // that went back to TexturePool and was destroyed from there - `source` is null by then.
+        // Fall back to the root resolution, exactly as an unused slot does.
+        return currentIndex > 0
+            ? this._filterStack[currentIndex].inputTexture?.source?._resolution ?? rootResolution
             : rootResolution;
     }
 
