@@ -67,6 +67,17 @@ export interface ContextSystemOptions
      * @default false
      */
     multiView: boolean;
+
+    /**
+     * Whether to ask the browser to restore the context after it is lost.
+     *
+     * A context lost by {@link GlContextSystem.forceContextLoss} is always restored. This option
+     * additionally covers a loss the browser initiated itself - typically because it needed the
+     * memory back - which otherwise leaves the renderer waiting for a `webglcontextrestored` event
+     * that some platforms never send.
+     * @default true
+     */
+    restoreContextOnLoss?: boolean;
 }
 
 /**
@@ -115,7 +126,12 @@ export class GlContextSystem implements System<ContextSystemOptions>
          * {@link WebGLOptions.multiView}
          * @default false
          */
-        multiView: false
+        multiView: false,
+        /**
+         * {@link WebGLOptions.restoreContextOnLoss}
+         * @default true
+         */
+        restoreContextOnLoss: true
     };
 
     protected CONTEXT_UID: number;
@@ -175,6 +191,7 @@ export class GlContextSystem implements System<ContextSystemOptions>
 
     private _renderer: WebGLRenderer;
     private _contextLossForced: boolean;
+    private _restoreContextOnLoss: boolean;
 
     /** @param renderer - The renderer this System works for. */
     constructor(renderer: WebGLRenderer)
@@ -210,6 +227,8 @@ export class GlContextSystem implements System<ContextSystemOptions>
     public init(options: ContextSystemOptions): void
     {
         options = { ...GlContextSystem.defaultOptions, ...options };
+
+        this._restoreContextOnLoss = options.restoreContextOnLoss ?? true;
 
         // TODO add to options
         let multiView = this.multiView = options.multiView;
@@ -398,21 +417,33 @@ export class GlContextSystem implements System<ContextSystemOptions>
      */
     protected handleContextLost(event: WebGLContextEvent): void
     {
+        // without this the context can never come back
         event.preventDefault();
 
-        // only restore if we purposefully nuked it
-        if (this._contextLossForced)
+        this._renderer.runners.contextLost.emit(this._renderer);
+
+        const wasForced = this._contextLossForced;
+
+        this._contextLossForced = false;
+
+        // A loss we caused is always restored. A loss the browser initiated is restored too when
+        // the option is on: the spec only guarantees restoreContext() for a context lost through
+        // WEBGL_lose_context, so this may do nothing - but the alternative is waiting forever for
+        // a webglcontextrestored event that some platforms never send. Listen for the `contextLost`
+        // runner if you need to recover in that case.
+        if (!wasForced && !this._restoreContextOnLoss) return;
+
+        // Restore the context after this event has exited
+        setTimeout(() =>
         {
-            this._contextLossForced = false;
-            // Restore the context after this event has exited
-            setTimeout(() =>
+            // destroyed while the event was in flight
+            if (!this.gl) return;
+
+            if (this.gl.isContextLost())
             {
-                if (this.gl.isContextLost())
-                {
-                    this.extensions.loseContext?.restoreContext();
-                }
-            }, 0);
-        }
+                this.extensions.loseContext?.restoreContext();
+            }
+        }, 0);
     }
 
     /** Handles a restored webgl context. */
