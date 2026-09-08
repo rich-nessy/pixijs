@@ -134,6 +134,8 @@ export class GpuDeviceSystem implements System<GpuContextOptions>
         // the renderer was destroyed, so there is nothing to restore
         if (!this._renderer) return;
 
+        this._renderer.runners.contextLost.emit(this._renderer);
+
         const gpu = await this._createDeviceAndAdaptor(this._options);
 
         // destroyed while the new device was being requested

@@ -410,6 +410,10 @@ export class FilterSystem implements System
 
         // return the texture to the pool so we can reuse the next frame
         TexturePool.returnTexture(filterData.inputTexture);
+
+        // `_filterStack` recycles its FilterData, so anything left here is held until the slot is
+        // reused - which for a container means holding a whole scene graph long after it is gone
+        filterData.container = null;
     }
 
     /**
@@ -780,8 +784,11 @@ export class FilterSystem implements System
             --currentIndex;
         }
 
-        return currentIndex > 0 && this._filterStack[currentIndex].inputTexture
-            ? this._filterStack[currentIndex].inputTexture.source._resolution
+        // `inputTexture` may belong to a slot that has already been popped, so it can be a texture
+        // that went back to TexturePool and was destroyed from there - `source` is null by then.
+        // Fall back to the root resolution, exactly as an unused slot does.
+        return currentIndex > 0
+            ? this._filterStack[currentIndex].inputTexture?.source?._resolution ?? rootResolution
             : rootResolution;
     }
 
@@ -915,6 +922,26 @@ export class FilterSystem implements System
             // return those textures for later!
             TexturePool.returnTexture(tempTexture);
         }
+
+        this._releaseBindGroupTextures();
+    }
+
+    /**
+     * Empties the texture slots of the shared filter bind group.
+     *
+     * `_globalFilterBindGroup` lives as long as the renderer, so whatever it was last given stays
+     * bound - which means a scene's texture source and its style outlive the scene, and are still
+     * bound when it tears down and destroys them. Every filter application sets slots 1 to 3 again
+     * before it draws, so there is nothing to gain from holding them in between.
+     *
+     * Slot 0 is left alone: it holds this system's own long-lived uniform group in the common case,
+     * so there is nothing there to release.
+     */
+    private _releaseBindGroupTextures(): void
+    {
+        this._globalFilterBindGroup.setResource(null, 1);
+        this._globalFilterBindGroup.setResource(null, 2);
+        this._globalFilterBindGroup.setResource(null, 3);
     }
 
     private _calculateFilterBounds(

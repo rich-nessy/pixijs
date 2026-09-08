@@ -84,10 +84,12 @@ export class BindGroup
      * Set a resource at a given index. This function will
      * ensure that listeners will be removed from the current resource
      * and added to the new resource.
-     * @param resource - The resource to set.
+     * @param resource - The resource to set, or `null` to empty the slot and stop holding
+     * whatever was there. Rendering with an empty slot raises a clear error in BindGroupSystem,
+     * so only clear a slot that is set again before the next draw.
      * @param index - The index to set the resource at.
      */
-    public setResource(resource: BindResource, index: number): void
+    public setResource(resource: BindResource | null, index: number): void
     {
         const currentResource = this.resources[index];
 
@@ -98,7 +100,7 @@ export class BindGroup
             currentResource.off?.('change', this.onResourceChange, this);
         }
 
-        resource.on?.('change', this.onResourceChange, this);
+        resource?.on?.('change', this.onResourceChange, this);
 
         this.resources[index] = resource;
         this._dirty = true;

@@ -137,6 +137,7 @@ const defaultRunners = [
     'init',
     'destroy',
     'contextChange',
+    'contextLost',
     'resolutionChange',
     'resetState',
     'renderEnd',
