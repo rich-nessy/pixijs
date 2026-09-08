@@ -489,8 +489,45 @@ export class TextureSource<T extends Record<string, any> = any> extends EventEmi
         }
 
         this.uploadMethodId = null;
+        this._releaseResource();
         this.resource = null;
         this.removeAllListeners();
+    }
+
+    /**
+     * Releases any memory the resource holds outside the JS heap, now that nothing can use it.
+     *
+     * Dropping the reference in {@link TextureSource.destroy} is not enough for every resource
+     * type: an `ImageBitmap` keeps its decoded pixels until it is closed, and a canvas keeps its
+     * backing store until it is resized away. Subclasses override this to release whatever their
+     * resource type holds.
+     *
+     * Only ever called from `destroy`. {@link TextureSource.unload} deliberately keeps `resource`
+     * so the source can be re-uploaded later - after garbage collection, or after a context loss -
+     * so releasing there would make those textures unrecoverable.
+     * @protected
+     */
+    protected _releaseResource(): void
+    {
+        const resource = this.resource as unknown;
+
+        if (!resource) return;
+
+        // both are explicitly closeable and hold their pixels off the JS heap
+        const closeable = (typeof ImageBitmap !== 'undefined' && resource instanceof ImageBitmap)
+            || (typeof VideoFrame !== 'undefined' && resource instanceof VideoFrame);
+
+        if (!closeable) return;
+
+        try
+        {
+            resource.close();
+        }
+        catch (_e)
+        {
+            // already closed, or closed by the resource's owner - either way the memory is gone
+            // and a failure here must not stop the rest of teardown
+        }
     }
 
     /**

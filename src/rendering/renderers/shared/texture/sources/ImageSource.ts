@@ -51,4 +51,20 @@ export class ImageSource extends TextureSource<ImageResource>
         || (typeof ImageBitmap !== 'undefined' && resource instanceof ImageBitmap)
         || (globalThis.VideoFrame && resource instanceof VideoFrame);
     }
+
+    protected override _releaseResource(): void
+    {
+        // closes ImageBitmap / VideoFrame resources
+        super._releaseResource();
+
+        const { resource } = this;
+
+        // an <img> holds its decoded bitmap for as long as it has a source, so drop it.
+        // removeAttribute rather than `src = ''`, which re-adds the attribute as the empty
+        // string and makes the browser resolve it against the document URL
+        if (globalThis.HTMLImageElement && resource instanceof HTMLImageElement)
+        {
+            resource.removeAttribute('src');
+        }
+    }
 }

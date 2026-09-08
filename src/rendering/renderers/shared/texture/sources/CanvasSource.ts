@@ -113,6 +113,29 @@ export class CanvasSource extends TextureSource<ICanvas>
         || (globalThis.OffscreenCanvas && resource instanceof OffscreenCanvas);
     }
 
+    protected override _releaseResource(): void
+    {
+        super._releaseResource();
+
+        // a canvas keeps its backing store - width * height * 4 bytes, and on some platforms a
+        // GPU-side copy too - until it is resized away, so collapse it now that nothing can draw
+        // to or upload from this source again
+        const { resource } = this;
+
+        this._context2D = null;
+        this._gpuContext = null;
+
+        try
+        {
+            resource.width = 0;
+            resource.height = 0;
+        }
+        catch (_e)
+        {
+            // a read-only canvas (some ICanvas implementations) - nothing more we can do
+        }
+    }
+
     /**
      * Returns the 2D rendering context for the canvas.
      * Caches the context after creating it.
