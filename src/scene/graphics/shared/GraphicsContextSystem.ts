@@ -3,6 +3,7 @@ import { getTextureBatchBindGroup } from '../../../rendering/batcher/gpu/getText
 import { type BatcherOptions } from '../../../rendering/batcher/shared/Batcher';
 import { DefaultBatcher } from '../../../rendering/batcher/shared/DefaultBatcher';
 import { InstructionSet } from '../../../rendering/renderers/shared/instructions/InstructionSet';
+import { RendererType } from '../../../rendering/renderers/types';
 import { GCManagedHash } from '../../../utils/data/GCManagedHash';
 import { deprecation, v8_3_4 } from '../../../utils/logging/deprecation';
 import { BigPool } from '../../../utils/pool/PoolGroup';
@@ -277,17 +278,26 @@ export class GraphicsContextSystem implements System<GraphicsContextSystemOption
         geometry.indexBuffer.setDataWithSize(batcher.indexBuffer, batcher.indexSize, true);
         geometry.buffers[0].setDataWithSize(batcher.attributeBuffer.float32View, batcher.attributeSize, true);
 
-        const drawBatches = batcher.batches;
-
-        for (let i = 0; i < drawBatches.length; i++)
+        // Only WebGPU reads batch.bindGroup - GlGraphicsAdaptor binds its batch textures straight
+        // through GlTextureSystem and never looks at it. Building it anyway put a BindGroup into
+        // getTextureBatchBindGroup's cache for every texture combination a WebGL app ever drew:
+        // that cache is module-level and never evicted, so the groups accumulate, and each one
+        // stays subscribed to its textures' `change` events. Destroying one of those textures
+        // later then warns that it was still bound to a shader, for a binding nothing could use.
+        if (this._renderer.type === RendererType.WEBGPU)
         {
-            const batch = drawBatches[i];
+            const drawBatches = batcher.batches;
 
-            batch.bindGroup = getTextureBatchBindGroup(
-                batch.textures.textures,
-                batch.textures.count,
-                this._renderer.limits.maxBatchableTextures
-            );
+            for (let i = 0; i < drawBatches.length; i++)
+            {
+                const batch = drawBatches[i];
+
+                batch.bindGroup = getTextureBatchBindGroup(
+                    batch.textures.textures,
+                    batch.textures.count,
+                    this._renderer.limits.maxBatchableTextures
+                );
+            }
         }
 
         return graphicsData;

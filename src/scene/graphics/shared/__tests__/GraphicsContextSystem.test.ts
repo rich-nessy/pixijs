@@ -102,3 +102,30 @@ describe('GraphicsContextSystem', () =>
         });
     });
 });
+
+describe('GraphicsContextSystem batch bind groups', () =>
+{
+    it('should not build batch bind groups on WebGL, which never reads them', async () =>
+    {
+        const renderer = await getWebGLRenderer();
+        const system = new GraphicsContextSystem(renderer);
+        const context = new GraphicsContext();
+
+        context.rect(0, 0, 50, 50).fill(0xff0000);
+        system.updateGpuContext(context);
+
+        const { batcher } = system.getContextRenderData(context);
+
+        expect(batcher.batches.length).toBeGreaterThan(0);
+
+        // GlGraphicsAdaptor binds its textures straight through GlTextureSystem. Building these
+        // anyway leaked a BindGroup per texture combination into a cache nothing evicts, each one
+        // subscribed to its textures' change events.
+        for (const batch of batcher.batches)
+        {
+            expect(batch.bindGroup).toBeNull();
+        }
+
+        renderer.destroy();
+    });
+});
