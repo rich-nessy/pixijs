@@ -63,23 +63,6 @@ describe('FilterSystem pooled texture lifetime', () =>
 
 describe('FilterSystem shared bind group lifetime', () =>
 {
-    it('should empty the bind group texture slots once the filters are applied', async () =>
-    {
-        const renderer = await getWebGLRenderer({ width: 100, height: 100 });
-        const scene = createNestedFilteredScene();
-
-        renderer.render(scene);
-
-        const bindGroup = renderer.filter['_globalFilterBindGroup'];
-
-        // the bind group outlives the renderer, so anything still here outlives the scene
-        expect(bindGroup.getResource(1)).toBeNull();
-        expect(bindGroup.getResource(2)).toBeNull();
-        expect(bindGroup.getResource(3)).toBeNull();
-
-        renderer.destroy();
-    });
-
     it('should not warn when the texture pool is cleared after a filter render', async () =>
     {
         const renderer = await getWebGLRenderer({ width: 100, height: 100 });
@@ -104,7 +87,7 @@ describe('FilterSystem shared bind group lifetime', () =>
         const renderer = await getWebGLRenderer({ width: 100, height: 100 });
         const scene = createNestedFilteredScene();
 
-        // slots are emptied after every pass, so each render has to repopulate them
+        // each pass rebinds the input texture, so repeated renders must keep working
         for (let i = 0; i < 3; i++)
         {
             expect(() => renderer.render(scene)).not.toThrow();

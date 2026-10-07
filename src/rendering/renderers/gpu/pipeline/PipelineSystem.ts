@@ -219,7 +219,7 @@ export class PipelineSystem implements System
 
     private _moduleCache: Record<string, GPUShaderModule> = Object.create(null);
     private _bufferLayoutsCache: Record<number, GPUVertexBufferLayout[]> = Object.create(null);
-    private readonly _bindingNamesCache: Record<string, Record<string, string>> = Object.create(null);
+    private readonly _bindingNamesCache: Record<string, string[]> = Object.create(null);
 
     private _pipeCache: PipeHash = new Map();
     private _pipeStateCaches: Record<number, PipeHash> = Object.create(null);
@@ -283,11 +283,12 @@ export class PipelineSystem implements System
         // attachment is usually about sampling the texture, which WebGPU only allows when the
         // entire attachment — stencil included — is read-only
         this._stencilReadOnly = renderTarget.depthStencilAttachment?.stencilReadOnly ?? this._depthReadOnly;
-        // WebGPU bakes winding into the (cached) pipeline, not as live state. `flipY` is opt-in: off →
-        // the framebuffer's natural ccw (exactly today); on → invert to cw so the projection flip and the
-        // winding flip cancel and culling is preserved. This bit feeds the cache key (getGlobalStateKey),
-        // so a flipY pass gets its own pipeline rather than aliasing — and an off pass keeps today's key.
-        this._invertFrontFace = !!renderTarget.flipY;
+        // WebGPU bakes winding into the (cached) pipeline, not as live state. The one spelling of the
+        // rule lives on the render target system; on WebGPU it resolves to plain `flipY`: off → the
+        // framebuffer's natural ccw; on → invert to cw so the projection flip and the winding flip
+        // cancel and culling is preserved. This bit feeds the cache key (getGlobalStateKey), so a
+        // flipY pass gets its own pipeline rather than aliasing — and an off pass keeps today's key.
+        this._invertFrontFace = this._renderer.renderTarget.isFrontFaceInverted(renderTarget, renderTarget.flipY);
         this._updatePipeHash();
     }
 
@@ -343,7 +344,7 @@ export class PipelineSystem implements System
     }
 
     /**
-     * Builds a {@link GPURenderBundleEncoderDescriptor} that matches the current render target
+     * Builds a `GPURenderBundleEncoderDescriptor` that matches the current render target
      * configuration (color formats, sample count, depth/stencil format, and which of its aspects
      * are read-only).
      * Used by {@link GpuEncoderSystem.beginBundle} to create a compatible render bundle encoder.
@@ -629,13 +630,13 @@ export class PipelineSystem implements System
     }
 
     /**
-     * Returns a hash of buffer names mapped to bind locations.
+     * Returns the buffer names to bind, one per vertex buffer slot.
      * This is used to bind the correct buffer to the correct location in the shader.
      * @param geometry - The geometry where to get the buffer names
      * @param program - The program where to get the buffer names
-     * @returns An object of buffer names mapped to the bind location.
+     * @returns The buffer names, indexed by vertex buffer slot.
      */
-    public getBufferNamesToBind(geometry: Geometry, program: GpuProgram): Record<string, string>
+    public getBufferNamesToBind(geometry: Geometry, program: GpuProgram): string[]
     {
         const key = (geometry._layoutKey << 16) | program._attributeLocationsKey;
 
@@ -644,7 +645,7 @@ export class PipelineSystem implements System
         const data = this._createVertexBufferLayouts(geometry, program);
 
         // now map the data to the buffers..
-        const bufferNamesToBind: Record<string, string> = Object.create(null);
+        const bufferNamesToBind: string[] = [];
 
         const attributeData = program.attributeData;
 
